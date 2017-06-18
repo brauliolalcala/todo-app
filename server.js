@@ -4,11 +4,13 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const _ = require('underscore');
+const clc = require('cli-color');
 
 var app = express();
 var PORT = process.env.PORT || 3000;
 
-var todos = [];
+//Base de datos
+const db = require('./playground/basic-sqlite-database');
 
 //MIDDLEWARE
 // app.use(bodyParser.urlencoded({ extended: false }));
@@ -19,87 +21,206 @@ app.get('/', (req, res) => {
   res.send('TODO API');
 });
 
-// GET /todos=completed=true
+// GET /todo?=completed=true&q=string
 app.get('/todos', (req, res) => {
-    var queryParams = req.query;
-    var filteredTodos = todos;
+  var queryParams = req.query;
+  var filteredTodos = {};
 
-    if ( queryParams.hasOwnProperty('completed') && queryParams.completed === 'true'){
-      filteredTodos = _.where( filteredTodos, {completed: true});
-    }else if ( queryParams.hasOwnProperty('completed') && queryParams.completed === 'false') {
-      filteredTodos = _.where( filteredTodos, {completed: false});
-    }
 
-    res.json(filteredTodos);
+  switch (queryParams.completed) {
+    case 'true':
+
+      if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
+        db.sequelize.sync().then(() => {
+          db.Todo.findAll({
+            where: {
+              completed: true,
+              description: {
+                $like: '%' + queryParams.q + '%'
+              }
+            }
+          }).then((todos) => {
+            filteredTodos = todos;
+            res.json(filteredTodos);
+          });
+        })
+
+        break;
+
+      } else {
+        db.sequelize.sync().then(() => {
+          db.Todo.findAll({
+            where: {
+              completed: true
+            }
+          }).then((todos) => {
+            filteredTodos = todos;
+            res.json(filteredTodos);
+          });
+        })
+
+        break;
+      }
+
+    case 'false':
+
+      if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
+        db.sequelize.sync().then(() => {
+          db.Todo.findAll({
+            where: {
+              completed: false,
+              description: {
+                $like: '%' + queryParams.q + '%'
+              }
+            }
+          }).then((todos) => {
+            filteredTodos = todos;
+            res.json(filteredTodos);
+          });
+        })
+
+        break;
+
+      } else {
+        db.sequelize.sync().then(() => {
+          db.Todo.findAll({
+            where: {
+              completed: false
+            }
+          }).then((todos) => {
+            filteredTodos = todos;
+            res.json(filteredTodos);
+          });
+        })
+
+        break;
+      }
+
+    case 'undefined':
+      if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
+        db.sequelize.sync().then(() => {
+          db.Todo.findAll({
+            where: {
+              description: {
+                $like: '%' + queryParams.q + '%'
+              }
+            }
+          }).then((todos) => {
+            filteredTodos = todos;
+            res.json(filteredTodos);
+          });
+        })
+        break;
+
+      }
+
+    default:
+      db.sequelize.sync().then(() => {
+        db.Todo.findAll().then((todos) => {
+          filteredTodos = todos;
+          res.json(filteredTodos);
+        });
+      })
+
+  }
+
 });
+
 
 // GET /todos/:id
 app.get('/todos/:id', (req, res) => {
   var todoId = parseInt(req.params.id, 10);
-  var matchedTodo =  _.findWhere(todos, {id: todoId});
+  var matchedTodo = {};
+  db.sequelize.sync().then(() => {
+    db.Todo.findById(todoId).then((todo) => {
+      matchedTodo = todo;
 
-  if(matchedTodo){
-    res.json(matchedTodo);
-  }else{
-    res
-      .status(404)
-      .send(`El objeto que está solcitando no existe`);
-  }
+      if (matchedTodo) {
+        res.json(matchedTodo);
+      } else {
+        res
+          .status(404)
+          .send(`El objeto que está solcitando no existe`);
+      }
+    });
+  })
+
 });
 
 
 
 //POST
-app.post('/todos', (req, res) =>{
+app.post('/todos', (req, res) => {
   var body = req.body;
   body = _.pick(body, 'description', 'completed');
 
-  if(!_.isBoolean(body.completed) || !_.isString(body.description) || body.description.trim().length === 0 ){
+  if (!_.isBoolean(body.completed) || !_.isString(body.description) || body.description.trim().length === 0) {
     res.status(404).send();
-  }else{
-    var id = _.size(todos) + 1;
-    body.id = id;
-    todos.push(body);
-    res.json(body);
+  } else {
+    db.sequelize.sync().then(() => {
+      db.Todo.create({
+        description: body.description,
+        completed: body.completed
+      }).then((todo) => {
+        console.log(clc.green(`Se ha creado una nueva entrada`));
+        res.json(todo);
+      });
+
+    })
   }
 });
 
 //Delete
-app.delete('/todos/:id', (req, res) =>{
+app.delete('/todos/:id', (req, res) => {
   var todoId = parseInt(req.params.id, 10);
-  var matchedTodo =  _.findWhere(todos, {id: todoId});
 
-  todos = _.without(todos, matchedTodo);
-  return res.json(matchedTodo);
+  db.sequelize.sync().then(() => {
+    db.Todo.findById(todoId).then((todo) => {
+      todo.destroy();
+      return res.json(todo);
+    })
+  })
+
+
 });
 
+
+
 //PUT
-app.put('/todos/:id', (req, res) =>{
+app.put('/todos/:id', (req, res) => {
   var todoId = parseInt(req.params.id, 10);
   var body = req.body;
-  body = _.pick(body, 'description', 'completed');
-  var matchedTodo =  _.findWhere(todos, {id: todoId});
   var atributos = {};
+  body = _.pick(body, 'description', 'completed');
 
-  if(!matchedTodo){
-    return res.status(404).send();
-  }
-
-  if(body.hasOwnProperty('completed') && _.isBoolean(body.completed)){
+  if (body.hasOwnProperty('completed') && _.isBoolean(body.completed)) {
     atributos.completed = body.completed;
-  }else if (!body.hasOwnProperty('completed')) {
+  } else if (!body.hasOwnProperty('completed')) {
     return res.status(404).send();
   }
 
-  if ( body.hasOwnProperty('description') && _.isString(body.description)) {
+  if (body.hasOwnProperty('description') && _.isString(body.description)) {
     atributos.description = body.description;
-  } else if ( !body.hasOwnProperty('description')) {
+  } else if (!body.hasOwnProperty('description')) {
     return res.status(404).send();
   }
 
-  _.extend( matchedTodo, atributos);
+  db.sequelize.sync().then(() => {
+    db.Todo.findById(todoId).then(todo => {
+      todo.completed = atributos.completed;
+      todo.description = atributos.description;
 
-  return res.json(matchedTodo);
+      todo.save()
+          .then( () => {
+            console.log(clc.green('Se ha actualizado una entrada'));
+            res.json(todo);
+          })
+          .catch( (e) => {
+            console.log(clc.red(e));
+            res.status(404).send();
+          });
+    })
+  })
 
 });
 

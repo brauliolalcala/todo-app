@@ -1,8 +1,18 @@
 const Sequelize = require('sequelize');
-const sequelize = new Sequelize(undefined, undefined, undefined, {
-  'dialect': 'sqlite',
-  'storage': `${__dirname}/basic-sqlite.database.sqlite`
-})
+var env = process.env.NODE_ENV || 'development';
+var sequelize;
+
+if (env === 'production') {
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: 'postgres'
+  })
+} else {
+  sequelize = new Sequelize(undefined, undefined, undefined, {
+    'dialect': 'sqlite',
+    'storage': `${__dirname}/basic-sqlite.database.sqlite`
+  })
+}
+
 
 var Todo = sequelize.define('todo', {
   description: {

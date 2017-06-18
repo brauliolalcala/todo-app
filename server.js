@@ -1,23 +1,15 @@
+//NPM PACKAGES
 const express = require('express');
+const bodyParser = require('body-parser');
+
 var app = express();
 var PORT = process.env.PORT || 3000;
 
-var todos = [{
-    id: 1,
-    description: 'Ir con mamá para almorzar',
-    completed: false
-  },
-  {
-    id: 2,
-    description: 'Ir al mercado',
-    completed: false
-  },
-  {
-    id: 3,
-    description: 'Alimentar a bella',
-    completed: false
-  }
-];
+var todos = [];
+
+//MIDDLEWARE
+// app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
 
 app.get('/', (req, res) => {
@@ -45,6 +37,18 @@ app.get('/todos/:id', (req, res) => {
       .status(404)
       .send(`El objeto que está solcitando no existe`);
   }
+})
+
+//POST
+app.post('/todos', (req, res) =>{
+  var body = req.body;
+  var id = todos.length + 1;
+  body.id = id;
+
+  todos.push(body);
+  
+  res.json(body);
+  console.log(body);
 })
 
 app.listen(PORT, () => console.log(`Servidor listo en el puero: ${PORT}!`));

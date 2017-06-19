@@ -25,8 +25,6 @@ app.get('/', (req, res) => {
 app.get('/todos', (req, res) => {
   var queryParams = req.query;
   var filteredTodos = {};
-  console.log(clc.red(queryParams.completed));
-
 
   switch (queryParams.completed) {
     case 'true':

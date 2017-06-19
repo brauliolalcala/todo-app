@@ -10,7 +10,7 @@ var app = express();
 var PORT = process.env.PORT || 3000;
 
 //Base de datos
-const db = require('./playground/basic-sqlite-database');
+const db = require('./db');
 
 //MIDDLEWARE
 // app.use(bodyParser.urlencoded({ extended: false }));
@@ -25,13 +25,14 @@ app.get('/', (req, res) => {
 app.get('/todos', (req, res) => {
   var queryParams = req.query;
   var filteredTodos = {};
+  console.log(clc.red(queryParams.completed));
 
 
   switch (queryParams.completed) {
     case 'true':
 
       if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
-        db.sequelize.sync().then(() => {
+
           db.Todo.findAll({
             where: {
               completed: true,
@@ -43,12 +44,11 @@ app.get('/todos', (req, res) => {
             filteredTodos = todos;
             res.json(filteredTodos);
           });
-        })
 
         break;
 
       } else {
-        db.sequelize.sync().then(() => {
+
           db.Todo.findAll({
             where: {
               completed: true
@@ -57,7 +57,7 @@ app.get('/todos', (req, res) => {
             filteredTodos = todos;
             res.json(filteredTodos);
           });
-        })
+
 
         break;
       }
@@ -65,7 +65,7 @@ app.get('/todos', (req, res) => {
     case 'false':
 
       if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
-        db.sequelize.sync().then(() => {
+
           db.Todo.findAll({
             where: {
               completed: false,
@@ -77,12 +77,12 @@ app.get('/todos', (req, res) => {
             filteredTodos = todos;
             res.json(filteredTodos);
           });
-        })
+
 
         break;
 
       } else {
-        db.sequelize.sync().then(() => {
+
           db.Todo.findAll({
             where: {
               completed: false
@@ -91,14 +91,14 @@ app.get('/todos', (req, res) => {
             filteredTodos = todos;
             res.json(filteredTodos);
           });
-        })
+
 
         break;
       }
 
-    case 'undefined':
+    case queryParams.completed:
       if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
-        db.sequelize.sync().then(() => {
+
           db.Todo.findAll({
             where: {
               description: {
@@ -109,18 +109,17 @@ app.get('/todos', (req, res) => {
             filteredTodos = todos;
             res.json(filteredTodos);
           });
-        })
-        break;
 
+        break;
       }
 
     default:
-      db.sequelize.sync().then(() => {
+
         db.Todo.findAll().then((todos) => {
           filteredTodos = todos;
           res.json(filteredTodos);
         });
-      })
+
 
   }
 
@@ -131,7 +130,7 @@ app.get('/todos', (req, res) => {
 app.get('/todos/:id', (req, res) => {
   var todoId = parseInt(req.params.id, 10);
   var matchedTodo = {};
-  db.sequelize.sync().then(() => {
+
     db.Todo.findById(todoId).then((todo) => {
       matchedTodo = todo;
 
@@ -143,7 +142,7 @@ app.get('/todos/:id', (req, res) => {
           .send(`El objeto que está solcitando no existe`);
       }
     });
-  })
+
 
 });
 
@@ -157,7 +156,7 @@ app.post('/todos', (req, res) => {
   if (!_.isBoolean(body.completed) || !_.isString(body.description) || body.description.trim().length === 0) {
     res.status(404).send();
   } else {
-    db.sequelize.sync().then(() => {
+
       db.Todo.create({
         description: body.description,
         completed: body.completed
@@ -165,8 +164,6 @@ app.post('/todos', (req, res) => {
         console.log(clc.green(`Se ha creado una nueva entrada`));
         res.json(todo);
       });
-
-    })
   }
 });
 
@@ -174,12 +171,13 @@ app.post('/todos', (req, res) => {
 app.delete('/todos/:id', (req, res) => {
   var todoId = parseInt(req.params.id, 10);
 
-  db.sequelize.sync().then(() => {
     db.Todo.findById(todoId).then((todo) => {
       todo.destroy();
       return res.json(todo);
-    })
-  })
+    }).catch( (e) => {
+      res.status(404).send(`El ítem que intenta acceder no existe`);}
+    )
+
 
 
 });
@@ -204,8 +202,6 @@ app.put('/todos/:id', (req, res) => {
   } else if (!body.hasOwnProperty('description')) {
     return res.status(404).send();
   }
-
-  db.sequelize.sync().then(() => {
     db.Todo.findById(todoId).then(todo => {
       todo.completed = atributos.completed;
       todo.description = atributos.description;
@@ -220,8 +216,9 @@ app.put('/todos/:id', (req, res) => {
             res.status(404).send();
           });
     })
-  })
 
 });
 
-app.listen(PORT, () => console.log(`Servidor listo en el puero: ${PORT}!`));
+db.sequelize.sync().then( () =>{
+  app.listen(PORT, () => console.log(`Servidor listo en el puero: ${PORT}!`));
+})

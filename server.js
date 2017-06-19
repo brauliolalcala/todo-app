@@ -217,6 +217,18 @@ app.put('/todos/:id', (req, res) => {
 
 });
 
+//USERS REQUESTS
+
+app.post('/users', (req, res) =>{
+  var body = _.pick(req.body, 'email', 'password', 'username');
+  body.email = body.email.toLowerCase();
+
+  db.user.create(body).then( (user) =>{
+    res.json(user);
+  }).catch( (e) => res.status(400).send(e))
+})
+
+
 db.sequelize.sync().then( () =>{
   app.listen(PORT, () => console.log(`Servidor listo en el puero: ${PORT}!`));
 })

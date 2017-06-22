@@ -1,9 +1,8 @@
 const bcrypt = require('bcrypt-nodejs');
 const _ = require('underscore');
 
-
 module.exports = (sequelize, DataTypes) => {
-  return sequelize.define('user', {
+  var user = sequelize.define('user', {
     email: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -47,4 +46,36 @@ module.exports = (sequelize, DataTypes) => {
       }
     }
   })
+
+  // Class Methods
+  user.authenticate = function(body) {
+
+    return new Promise(function(resolve, reject) {
+      if (typeof body.email !== 'string' || typeof body.password !== 'string') {
+        return reject();
+      }
+
+      user.findOne({
+        where: {
+          email: body.email
+        }
+      }).then((user) => {
+        if (!user || !bcrypt.compareSync(body.password, user.get('password_hash'))) {
+          return reject();
+        }
+        return resolve(user);
+      }).catch((e) => res.status(500).send());
+
+    });
+
+  }
+
+  // Instance Methods
+
+  user.prototype.toPublicJSON = function() {
+    var json = this.toJSON();
+    return _.pick(json, 'id', 'email', 'username', 'createdAt', 'updatedAt');
+  }
+
+  return user;
 }

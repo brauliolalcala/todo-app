@@ -14,6 +14,8 @@ var PORT = process.env.PORT || 3000;
 const db = require('./db');
 
 //MIDDLEWARE
+const middleware = require('./middleware.js')(db);
+
 // app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
@@ -21,110 +23,42 @@ app.get('/', (req, res) => {
   res.send('TODO API');
 });
 
-// GET /todo?=completed=true&q=string
-app.get('/todos', (req, res) => {
+// GET /todo?completed=true&q=string
+app.get('/todos', middleware.requireAuthentication, (req, res) => {
   var queryParams = req.query;
-  var filteredTodos = {};
+  var where = {
+    userId: req.user.get('id')
+  };
 
-  switch (queryParams.completed) {
-    case 'true':
-
-      if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
-
-        db.Todo.findAll({
-          where: {
-            completed: true,
-            description: {
-              $like: '%' + queryParams.q + '%'
-            }
-          }
-        }).then((todos) => {
-          filteredTodos = todos;
-          res.json(filteredTodos);
-        });
-
-        break;
-
-      } else {
-
-        db.Todo.findAll({
-          where: {
-            completed: true
-          }
-        }).then((todos) => {
-          filteredTodos = todos;
-          res.json(filteredTodos);
-        });
-
-        break;
-      }
-
-    case 'false':
-
-      if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
-
-        db.Todo.findAll({
-          where: {
-            completed: false,
-            description: {
-              $like: '%' + queryParams.q + '%'
-            }
-          }
-        }).then((todos) => {
-          filteredTodos = todos;
-          res.json(filteredTodos);
-        });
-
-        break;
-
-      } else {
-
-        db.Todo.findAll({
-          where: {
-            completed: false
-          }
-        }).then((todos) => {
-          filteredTodos = todos;
-          res.json(filteredTodos);
-        });
-
-        break;
-      }
-
-    case queryParams.completed:
-      if (queryParams.hasOwnProperty('q') && _.isString(queryParams.q)) {
-
-        db.Todo.findAll({
-          where: {
-            description: {
-              $like: '%' + queryParams.q + '%'
-            }
-          }
-        }).then((todos) => {
-          filteredTodos = todos;
-          res.json(filteredTodos);
-        });
-
-        break;
-      }
-
-    default:
-
-      db.Todo.findAll().then((todos) => {
-        filteredTodos = todos;
-        res.json(filteredTodos);
-      });
-
+  if (queryParams.hasOwnProperty('completed') && queryParams.completed == true) {
+    where.completed = true;
+  } else if (queryParams.hasOwnProperty('completed') && queryParams.completed   == false) {
+    where.completed = false;
   }
+
+  if (queryParams.hasOwnProperty('q') && queryParams.q.length > 0) {
+    where.description = {
+      $like: `%${queryParams.q}%`
+    }
+  }
+
+  db.Todo.findAll({where: where}).then((todos) => {
+    res.json(todos);
+  }).catch(() => res.status(500).send());
 
 });
 
 // GET /todos/:id
-app.get('/todos/:id', (req, res) => {
+app.get('/todos/:id', middleware.requireAuthentication, (req, res) => {
   var todoId = parseInt(req.params.id, 10);
   var matchedTodo = {};
 
-  db.Todo.findById(todoId).then((todo) => {
+  db.Todo.findOne({
+    where: {
+      userId: req.user.get('id'),
+      id: todoId
+    }
+  }).then((todo) => {
     matchedTodo = todo;
 
     if (matchedTodo) {
@@ -137,7 +71,7 @@ app.get('/todos/:id', (req, res) => {
 });
 
 //POST
-app.post('/todos', (req, res) => {
+app.post('/todos', middleware.requireAuthentication, (req, res) => {
   var body = req.body;
   body = _.pick(body, 'description', 'completed');
 
@@ -146,17 +80,27 @@ app.post('/todos', (req, res) => {
   } else {
 
     db.Todo.create({description: body.description, completed: body.completed}).then((todo) => {
+      req.user.addTodo(todo).then((todo) => {
+        return todo.reload();
+      })
+
       console.log(clc.green(`Se ha creado una nueva entrada`));
       res.json(todo);
-    });
+
+    }).catch( () => res.status(500).send());
   }
 });
 
 //Delete
-app.delete('/todos/:id', (req, res) => {
+app.delete('/todos/:id', middleware.requireAuthentication, (req, res) => {
   var todoId = parseInt(req.params.id, 10);
 
-  db.Todo.findById(todoId).then((todo) => {
+  db.Todo.findOne({
+    where: {
+      userId: req.user.get('id'),
+      id: todoId
+    }
+  }).then((todo) => {
     todo.destroy();
     return res.json(todo);
   }).catch((e) => {
@@ -166,7 +110,7 @@ app.delete('/todos/:id', (req, res) => {
 });
 
 //PUT
-app.put('/todos/:id', (req, res) => {
+app.put('/todos/:id', middleware.requireAuthentication, (req, res) => {
   var todoId = parseInt(req.params.id, 10);
   var body = req.body;
   var atributos = {};
@@ -183,7 +127,12 @@ app.put('/todos/:id', (req, res) => {
   } else if (!body.hasOwnProperty('description')) {
     return res.status(404).send();
   }
-  db.Todo.findById(todoId).then(todo => {
+  db.Todo.findOne({
+    where: {
+      userId: req.user.get('id'),
+      id: todoId
+    }
+  }).then(todo => {
     todo.completed = atributos.completed;
     todo.description = atributos.description;
 
@@ -206,23 +155,48 @@ app.post('/users', (req, res) => {
 
   db.user.create(body).then((user) => {
     res.json(user.toPublicJSON());
-  }).catch((e) => res.status(400).send(e))
+  }).catch((e) => {
+    console.error(e);
+    res.status(400).send(e)
+  })
 })
 
 // POST /users/login
 app.post('/users/login', (req, res) => {
   var body = _.pick(req.body, 'email', 'password', 'username');
+  var userInstance;
 
   if (typeof body.email !== 'string' || typeof body.password !== 'string') {
+    console.log(`body.email no es string`);
     return res.status(400).send();
   }
 
   db.user.authenticate(body).then((user) => {
-    res.json(user.toPublicJSON());
-  }).catch((e) => res.status(401).send());
+    var token = user.generateToken('authentication');
+    userInstance = user;
+
+    return db.token.create({
+      token: token
+    })
+
+  }).then( (tokenInstance) =>{
+    res.header('Auth', tokenInstance.get('token')).json(userInstance.toPublicJSON())
+  }).catch((e) => {
+    console.error(e);
+    res.status(401).send();
+  });
 
 })
 
-db.sequelize.sync().then(() => {
+
+//DELETE /users/login
+app.delete('/users/login', middleware.requireAuthentication, (req, res) => {
+  req.token.destroy().then( () =>{
+    res.status(204).send();
+  }).catch( () => res.status(500).send() );
+
+})
+
+db.sequelize.sync({force: true}).then(() => {
   app.listen(PORT, () => console.log(`Servidor listo en el puero: ${PORT}!`));
 })

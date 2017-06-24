@@ -1,5 +1,7 @@
 const bcrypt = require('bcrypt-nodejs');
 const _ = require('underscore');
+const cryptojs = require('crypto-js');
+const jwt = require('jsonwebtoken');
 
 module.exports = (sequelize, DataTypes) => {
   var user = sequelize.define('user', {
@@ -48,9 +50,9 @@ module.exports = (sequelize, DataTypes) => {
   })
 
   // Class Methods
-  user.authenticate = function(body) {
+  user.authenticate = (body) => {
 
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
       if (typeof body.email !== 'string' || typeof body.password !== 'string') {
         return reject();
       }
@@ -67,14 +69,45 @@ module.exports = (sequelize, DataTypes) => {
       }).catch((e) => res.status(500).send());
 
     });
+  }
+
+  user.findByToken = function (token) {
+    return new Promise( (resolve, reject) =>{
+      try {
+        var decodedJWT = jwt.verify(token, 'secretKeyJWT');
+        var bytes = cryptojs.AES.decrypt(decodedJWT.token, 'secretKeyCRYPTO');
+        var tokenData = JSON.parse(bytes.toString(cryptojs.enc.Utf8));
+
+        user.findById(tokenData.id).then( (user) => resolve(user)).catch( () => reject());
+      } catch (e) {
+        reject();
+      }
+    });
 
   }
 
   // Instance Methods
 
-  user.prototype.toPublicJSON = function() {
+  user.prototype.toPublicJSON = function () {
     var json = this.toJSON();
     return _.pick(json, 'id', 'email', 'username', 'createdAt', 'updatedAt');
+  }
+
+  user.prototype.generateToken = function (type) {
+    if (!_.isString(type)) {
+      return undefined;
+    }
+
+    try {
+      var stringData = JSON.stringify({id: this.get('id'), type: type});
+      var encryptedData = cryptojs.AES.encrypt(stringData, 'secretKeyCRYPTO').toString();
+      var token = jwt.sign({
+        token: encryptedData
+      }, 'secretKeyJWT');
+      return token;
+    } catch (e) {
+      return undefined;
+    }
   }
 
   return user;
